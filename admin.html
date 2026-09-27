@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GhorerSathi Admin Panel</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;font-family:Arial,"Noto Sans Bengali",sans-serif;background:#f5f7fb;color:#172033}
+    .hidden{display:none!important}
+    .wrap{max-width:1150px;margin:0 auto;padding:24px}
+    .login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+    .box{background:#fff;border-radius:16px;padding:28px;box-shadow:0 10px 35px #00000012}
+    .login .box{width:100%;max-width:430px}
+    h1,h2{margin-top:0}
+    .brand{font-size:28px;font-weight:800;margin-bottom:8px}
+    .muted{color:#667085}
+    label{display:block;font-weight:700;margin:16px 0 7px}
+    input,textarea{width:100%;border:1px solid #d9dee8;border-radius:10px;padding:12px;font-size:15px;outline:none}
+    input:focus,textarea:focus{border-color:#16865b;box-shadow:0 0 0 3px #16865b18}
+    textarea{min-height:100px;resize:vertical}
+    button{border:0;border-radius:10px;padding:11px 16px;font-weight:700;cursor:pointer}
+    .primary{background:#16865b;color:#fff}
+    .secondary{background:#eef2f6;color:#172033}
+    .danger{background:#ffe8e8;color:#b42318}
+    .topbar{background:#fff;border-bottom:1px solid #e7eaf0}
+    .topbar-inner{max-width:1150px;margin:auto;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .grid{display:grid;grid-template-columns:390px 1fr;gap:22px;margin-top:22px}
+    .card{background:#fff;border-radius:16px;padding:22px;box-shadow:0 4px 18px #00000008}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}
+    .preview{margin-top:12px;display:none}
+    .preview img{width:100%;max-height:220px;object-fit:contain;border-radius:10px;background:#f3f4f6}
+    .products{display:grid;gap:12px}
+    .product{border:1px solid #e5e7eb;border-radius:12px;padding:12px;display:grid;grid-template-columns:82px 1fr auto;gap:13px;align-items:center}
+    .product img{width:82px;height:82px;object-fit:cover;border-radius:10px;background:#f1f3f5}
+    .product h3{margin:0 0 5px;font-size:17px}
+    .price{font-weight:800;color:#16865b}
+    .stock{font-size:13px;color:#667085;margin-top:4px}
+    .msg{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:14px;display:none}
+    .ok{background:#e9f8ef;color:#137333}
+    .err{background:#fff0f0;color:#b42318}
+    .loading{opacity:.65;pointer-events:none}
+    @media(max-width:850px){.grid{grid-template-columns:1fr}.product{grid-template-columns:65px 1fr}.product img{width:65px;height:65px}.product .actions{grid-column:1/-1}}
+  </style>
+</head>
+<body>
+
+<section id="loginView" class="login">
+  <div class="box">
+    <div class="brand">GhorerSathi Admin</div>
+    <div class="muted">শুধু Admin account দিয়ে লগইন করুন</div>
+
+    <label>Email</label>
+    <input id="loginEmail" type="email" placeholder="Admin email" autocomplete="username">
+
+    <label>Password</label>
+    <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password">
+
+    <div class="actions">
+      <button id="loginBtn" class="primary">Login</button>
+    </div>
+    <div id="loginMsg" class="msg"></div>
+  </div>
+</section>
+
+<section id="adminView" class="hidden">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div>
+        <strong>GhorerSathi Admin Panel</strong>
+        <div id="adminEmail" class="muted" style="font-size:13px"></div>
+      </div>
+      <button id="logoutBtn" class="secondary">Logout</button>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <div class="grid">
+      <div class="card">
+        <h2 id="formTitle">নতুন Product</h2>
+
+        <label>Product Name</label>
+        <input id="name" type="text" placeholder="যেমন: Santa Claus">
+
+        <label>Price (৳)</label>
+        <input id="price" type="number" min="0" step="0.01" placeholder="500">
+
+        <label>Description</label>
+        <textarea id="description" placeholder="Product description"></textarea>
+
+        <label>Stock</label>
+        <input id="stock" type="number" min="0" step="1" placeholder="10">
+
+        <label>Product Image</label>
+        <input id="image" type="file" accept="image/*">
+
+        <div id="preview" class="preview">
+          <img id="previewImg" alt="Preview">
+        </div>
+
+        <div class="actions">
+          <button id="saveBtn" class="primary">Add Product</button>
+          <button id="cancelBtn" class="secondary hidden">Cancel Edit</button>
+        </div>
+        <div id="formMsg" class="msg"></div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <h2 style="margin-bottom:0">Products</h2>
+          <button id="refreshBtn" class="secondary">Refresh</button>
+        </div>
+        <div id="listMsg" class="msg"></div>
+        <div id="products" class="products" style="margin-top:16px"></div>
+      </div>
+    </div>
+  </main>
+</section>
+
+<script>
+  const SUPABASE_URL = "https://mkkoffeywgeobmulhbdj.supabase.co";
+  const SUPABASE_KEY = "sb_publishable_lnFtriIZb46pB0dQHbXDgA_QQomTDb3";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let editingId = null;
+  let editingImageUrl = null;
+
+  const $ = id => document.getElementById(id);
+
+  function showMsg(id, text, type="ok") {
+    const el = $(id);
+    el.textContent = text;
+    el.className = "msg " + type;
+    el.style.display = "block";
+  }
+  function hideMsg(id){ $(id).style.display = "none"; }
+
+  function escapeHtml(value){
+    return String(value ?? "").replace(/[&<>"']/g, c => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+    }[c]));
+  }
+
+  function resetForm(){
+    editingId = null;
+    editingImageUrl = null;
+    $("formTitle").textContent = "নতুন Product";
+    $("saveBtn").textContent = "Add Product";
+    $("cancelBtn").classList.add("hidden");
+    $("name").value = "";
+    $("price").value = "";
+    $("description").value = "";
+    $("stock").value = "";
+    $("image").value = "";
+    $("preview").style.display = "none";
+    $("previewImg").src = "";
+    hideMsg("formMsg");
+  }
+
+  function imagePathFromUrl(url){
+    if(!url) return null;
+    const marker = "/storage/v1/object/public/products/";
+    const i = url.indexOf(marker);
+    return i >= 0 ? decodeURIComponent(url.slice(i + marker.length)) : null;
+  }
+
+  async function loadProducts(){
+    hideMsg("listMsg");
+    $("products").innerHTML = "<div class='muted'>Loading...</div>";
+    const {data, error} = await supabaseClient
+      .from("products")
+      .select("*")
+      .order("id", {ascending:false});
+
+    if(error){
+      showMsg("listMsg", error.message, "err");
+      return;
+    }
+
+    if(!data.length){
+      $("products").innerHTML = "<div class='muted'>কোনো product নেই।</div>";
+      return;
+    }
+
+    $("products").innerHTML = data.map(p => `
+      <div class="product">
+        <img src="${escapeHtml(p.image_url || "")}" alt="">
+        <div>
+          <h3>${escapeHtml(p.name)}</h3>
+          <div class="price">৳${Number(p.price || 0).toLocaleString("en-BD")}</div>
+          <div class="stock">Stock: ${Number(p.stock || 0)}</div>
+          <div class="muted" style="font-size:13px;margin-top:4px">${escapeHtml(p.description || "")}</div>
+        </div>
+        <div class="actions" style="margin-top:0">
+          <button class="secondary" onclick='editProduct(${JSON.stringify(p).replace(/</g,"\\u003c")})'>Edit</button>
+          <button class="danger" onclick="deleteProduct(${Number(p.id)})">Delete</button>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  window.editProduct = function(p){
+    editingId = p.id;
+    editingImageUrl = p.image_url || null;
+    $("formTitle").textContent = "Product Edit";
+    $("saveBtn").textContent = "Update Product";
+    $("cancelBtn").classList.remove("hidden");
+    $("name").value = p.name || "";
+    $("price").value = p.price ?? "";
+    $("description").value = p.description || "";
+    $("stock").value = p.stock ?? "";
+    $("image").value = "";
+    if(p.image_url){
+      $("previewImg").src = p.image_url;
+      $("preview").style.display = "block";
+    } else {
+      $("preview").style.display = "none";
+    }
+    hideMsg("formMsg");
+    window.scrollTo({top:0,behavior:"smooth"});
+  };
+
+  window.deleteProduct = async function(id){
+    if(!confirm("এই product টি delete করবেন?")) return;
+
+    const {data:p, error:getErr} = await supabaseClient
+      .from("products").select("image_url").eq("id", id).single();
+
+    if(getErr){ showMsg("listMsg", getErr.message, "err"); return; }
+
+    const {error} = await supabaseClient.from("products").delete().eq("id", id);
+    if(error){ showMsg("listMsg", error.message, "err"); return; }
+
+    const path = imagePathFromUrl(p.image_url);
+    if(path){
+      await supabaseClient.storage.from("products").remove([path]);
+    }
+
+    await loadProducts();
+    showMsg("listMsg", "Product deleted successfully.");
+  };
+
+  $("image").addEventListener("change", () => {
+    const file = $("image").files[0];
+    if(!file) return;
+    $("previewImg").src = URL.createObjectURL(file);
+    $("preview").style.display = "block";
+  });
+
+  $("cancelBtn").addEventListener("click", resetForm);
+
+  $("refreshBtn").addEventListener("click", loadProducts);
+
+  $("saveBtn").addEventListener("click", async () => {
+    hideMsg("formMsg");
+
+    const name = $("name").value.trim();
+    const price = Number($("price").value);
+    const description = $("description").value.trim();
+    const stock = Number($("stock").value);
+    const file = $("image").files[0];
+
+    if(!name){ showMsg("formMsg","Product name দিন।","err"); return; }
+    if(!Number.isFinite(price) || price < 0){ showMsg("formMsg","সঠিক price দিন।","err"); return; }
+    if(!Number.isInteger(stock) || stock < 0){ showMsg("formMsg","সঠিক stock দিন।","err"); return; }
+    if(!editingId && !file){ showMsg("formMsg","নতুন product-এর জন্য image নির্বাচন করুন।","err"); return; }
+
+    $("saveBtn").classList.add("loading");
+    $("saveBtn").textContent = editingId ? "Updating..." : "Adding...";
+
+    try {
+      let imageUrl = editingImageUrl;
+
+      if(file){
+        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${crypto.randomUUID()}.${ext}`;
+
+        const {error:uploadError} = await supabaseClient.storage
+          .from("products")
+          .upload(path, file, {upsert:false, contentType:file.type});
+
+        if(uploadError) throw uploadError;
+
+        const {data:urlData} = supabaseClient.storage
+          .from("products")
+          .getPublicUrl(path);
+
+        imageUrl = urlData.publicUrl;
+
+        if(editingId && editingImageUrl){
+          const oldPath = imagePathFromUrl(editingImageUrl);
+          if(oldPath) await supabaseClient.storage.from("products").remove([oldPath]);
+        }
+      }
+
+      const payload = {name, price, description, stock, image_url:imageUrl};
+
+      if(editingId){
+        const {error} = await supabaseClient.from("products").update(payload).eq("id", editingId);
+        if(error) throw error;
+        showMsg("formMsg","Product updated successfully.");
+      } else {
+        const {error} = await supabaseClient.from("products").insert(payload);
+        if(error) throw error;
+        showMsg("formMsg","Product added successfully.");
+      }
+
+      resetForm();
+      await loadProducts();
+      showMsg("listMsg", editingId ? "Product updated." : "Product added.");
+    } catch(err) {
+      showMsg("formMsg", err.message || "Something went wrong.", "err");
+      $("saveBtn").textContent = editingId ? "Update Product" : "Add Product";
+    } finally {
+      $("saveBtn").classList.remove("loading");
+    }
+  });
+
+  $("loginBtn").addEventListener("click", async () => {
+    hideMsg("loginMsg");
+    const email = $("loginEmail").value.trim();
+    const password = $("loginPassword").value;
+
+    if(!email || !password){
+      showMsg("loginMsg","Email এবং password দিন।","err");
+      return;
+    }
+
+    $("loginBtn").classList.add("loading");
+    $("loginBtn").textContent = "Logging in...";
+
+    const {data, error} = await supabaseClient.auth.signInWithPassword({email,password});
+
+    $("loginBtn").classList.remove("loading");
+    $("loginBtn").textContent = "Login";
+
+    if(error){
+      showMsg("loginMsg", error.message, "err");
+      return;
+    }
+
+    await showAdmin(data.user);
+  });
+
+  async function showAdmin(user){
+    if(!user) return;
+    const {data:admin, error} = await supabaseClient
+      .from("admin_users")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if(error || !admin){
+      await supabaseClient.auth.signOut();
+      showMsg("loginMsg","এই account-টি Admin হিসেবে অনুমোদিত নয়।","err");
+      return;
+    }
+
+    $("loginView").classList.add("hidden");
+    $("adminView").classList.remove("hidden");
+    $("adminEmail").textContent = user.email || "";
+    await loadProducts();
+  }
+
+  $("logoutBtn").addEventListener("click", async () => {
+    await supabaseClient.auth.signOut();
+    $("adminView").classList.add("hidden");
+    $("loginView").classList.remove("hidden");
+    $("loginPassword").value = "";
+  });
+
+  (async function init(){
+    const {data} = await supabaseClient.auth.getSession();
+    if(data.session) await showAdmin(data.session.user);
+  })();
+</script>
+</body>
+</html>
